@@ -44,6 +44,16 @@ Example endpoint format:
 https://your-resource-name.cognitiveservices.azure.com
 ```
 
+Some Azure Speech resources also show a regional endpoint like:
+
+```text
+https://centralindia.api.cognitive.microsoft.com
+```
+
+Use the full endpoint shown in your Azure Speech resource page.
+
+If the page says the Speech SDK could not be reached, refresh the browser and check that your internet connection, firewall, or browser extensions are not blocking scripts from Microsoft or jsDelivr.
+
 ## How To Use
 
 1. Paste your Speech key.

@@ -59,7 +59,7 @@ function setStatus(type, title, message) {
 
 function ensureSdk() {
   if (!window.SpeechSDK) {
-    throw new Error("Speech SDK is still loading or could not be reached. Check your internet connection and try again.");
+    throw new Error("Speech SDK is still loading or could not be reached. Check your internet connection, allow Microsoft/CDN scripts, then refresh the page.");
   }
 }
 
@@ -458,6 +458,25 @@ function bindTheme() {
 }
 
 function bindEvents() {
+  window.addEventListener("speech-sdk-ready", () => {
+    if (window.SpeechSDK) {
+      const ready = elements.speechKey.value.trim() && elements.speechEndpoint.value.trim();
+      setStatus(
+        ready ? "ok" : "",
+        ready ? "Speech SDK ready" : "Ready to connect",
+        ready ? "Choose a task and run the Speech Service." : "Enter your Speech key and endpoint to begin."
+      );
+    }
+  });
+
+  window.addEventListener("speech-sdk-failed", () => {
+    setStatus(
+      "error",
+      "Speech SDK could not load",
+      "Check your internet connection, browser extensions, firewall, or CDN access, then refresh the page."
+    );
+  });
+
   elements.toggleKey.addEventListener("click", () => {
     const showing = elements.speechKey.type === "text";
     elements.speechKey.type = showing ? "password" : "text";
@@ -492,3 +511,7 @@ bindTheme();
 bindTabs();
 bindEvents();
 updateTranscriptStats();
+
+if (window.SpeechSDK) {
+  window.dispatchEvent(new Event("speech-sdk-ready"));
+}
