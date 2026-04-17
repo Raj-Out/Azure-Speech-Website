@@ -206,22 +206,6 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script>
-    window.markSpeechSdkReady = function () {
-      window.dispatchEvent(new Event("speech-sdk-ready"));
-    };
-
-    window.loadSpeechSdkFallback = function () {
-      const fallbackScript = document.createElement("script");
-      fallbackScript.src = "https://cdn.jsdelivr.net/npm/microsoft-cognitiveservices-speech-sdk/distrib/browser/microsoft.cognitiveservices.speech.sdk.bundle.js";
-      fallbackScript.onload = window.markSpeechSdkReady;
-      fallbackScript.onerror = function () {
-        window.dispatchEvent(new Event("speech-sdk-failed"));
-      };
-      document.head.appendChild(fallbackScript);
-    };
-  </script>
-  <script src="https://aka.ms/csspeech/jsbrowserpackageraw" onload="window.markSpeechSdkReady()" onerror="window.loadSpeechSdkFallback()"></script>
   <script src="script.js"></script>
 </body>
 </html>

@@ -3,8 +3,16 @@ const SpeechApp = {
   synthesizer: null,
   audioPlayer: null,
   lastAudioUrl: null,
+  sdkReady: false,
+  sdkLoading: false,
   toastTimer: null,
 };
+
+const SPEECH_SDK_SOURCES = [
+  "https://aka.ms/csspeech/jsbrowserpackageraw",
+  "https://cdn.jsdelivr.net/npm/microsoft-cognitiveservices-speech-sdk/distrib/browser/microsoft.cognitiveservices.speech.sdk.bundle.js",
+  "https://unpkg.com/microsoft-cognitiveservices-speech-sdk/distrib/browser/microsoft.cognitiveservices.speech.sdk.bundle.js",
+];
 
 const elements = {
   root: document.documentElement,
@@ -57,9 +65,102 @@ function setStatus(type, title, message) {
   elements.statusMessage.textContent = message;
 }
 
+function setSpeechActionsEnabled(enabled) {
+  [
+    elements.recognizeOnce,
+    elements.startContinuous,
+    elements.speakText,
+    elements.translateOnce,
+  ].forEach((button) => {
+    button.disabled = !enabled;
+  });
+
+  if (!enabled) {
+    elements.stopContinuous.disabled = true;
+  }
+}
+
+function markSdkReady(source) {
+  SpeechApp.sdkReady = true;
+  SpeechApp.sdkLoading = false;
+  setSpeechActionsEnabled(true);
+
+  const ready = elements.speechKey.value.trim() && elements.speechEndpoint.value.trim();
+  setStatus(
+    ready ? "ok" : "",
+    ready ? "Speech SDK ready" : "Ready to connect",
+    ready ? "Choose a task and run the Speech Service." : "Enter your Speech key and endpoint to begin."
+  );
+
+  console.info(`Speech SDK loaded from ${source}`);
+}
+
+function loadScript(source) {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = source;
+    script.async = true;
+
+    const timeout = window.setTimeout(() => {
+      script.remove();
+      reject(new Error(`Timed out loading ${source}`));
+    }, 9000);
+
+    script.onload = () => {
+      window.clearTimeout(timeout);
+      if (window.SpeechSDK) {
+        resolve(source);
+        return;
+      }
+      script.remove();
+      reject(new Error(`Loaded ${source}, but SpeechSDK was not available.`));
+    };
+
+    script.onerror = () => {
+      window.clearTimeout(timeout);
+      script.remove();
+      reject(new Error(`Failed to load ${source}`));
+    };
+
+    document.head.appendChild(script);
+  });
+}
+
+async function loadSpeechSdk() {
+  if (window.SpeechSDK) {
+    markSdkReady("existing page script");
+    return;
+  }
+
+  if (SpeechApp.sdkLoading) return;
+
+  SpeechApp.sdkLoading = true;
+  setSpeechActionsEnabled(false);
+  setStatus("", "Loading Speech SDK", "Preparing the browser speech tools. This can take a few seconds.");
+
+  for (const source of SPEECH_SDK_SOURCES) {
+    try {
+      const loadedSource = await loadScript(source);
+      markSdkReady(loadedSource);
+      return;
+    } catch (error) {
+      console.warn(error.message);
+    }
+  }
+
+  SpeechApp.sdkLoading = false;
+  setSpeechActionsEnabled(false);
+  setStatus(
+    "error",
+    "Speech SDK could not load",
+    "Your browser or network blocked Microsoft, jsDelivr, and unpkg SDK scripts. Try another browser, disable script blockers, or use another network."
+  );
+}
+
 function ensureSdk() {
   if (!window.SpeechSDK) {
-    throw new Error("Speech SDK is still loading or could not be reached. Check your internet connection, allow Microsoft/CDN scripts, then refresh the page.");
+    loadSpeechSdk();
+    throw new Error("Speech SDK is still loading. Wait a few seconds, then try again.");
   }
 }
 
@@ -458,25 +559,6 @@ function bindTheme() {
 }
 
 function bindEvents() {
-  window.addEventListener("speech-sdk-ready", () => {
-    if (window.SpeechSDK) {
-      const ready = elements.speechKey.value.trim() && elements.speechEndpoint.value.trim();
-      setStatus(
-        ready ? "ok" : "",
-        ready ? "Speech SDK ready" : "Ready to connect",
-        ready ? "Choose a task and run the Speech Service." : "Enter your Speech key and endpoint to begin."
-      );
-    }
-  });
-
-  window.addEventListener("speech-sdk-failed", () => {
-    setStatus(
-      "error",
-      "Speech SDK could not load",
-      "Check your internet connection, browser extensions, firewall, or CDN access, then refresh the page."
-    );
-  });
-
   elements.toggleKey.addEventListener("click", () => {
     const showing = elements.speechKey.type === "text";
     elements.speechKey.type = showing ? "password" : "text";
@@ -511,7 +593,4 @@ bindTheme();
 bindTabs();
 bindEvents();
 updateTranscriptStats();
-
-if (window.SpeechSDK) {
-  window.dispatchEvent(new Event("speech-sdk-ready"));
-}
+loadSpeechSdk();
