@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Speech Studio Web</title>
+  <link rel="preconnect" href="https://images.unsplash.com">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="app-shell">
+    <section class="topbar" aria-label="Application header">
+      <div>
+        <p class="eyebrow">Azure Speech Service</p>
+        <h1>Speech Studio Web</h1>
+      </div>
+      <button class="theme-toggle" id="themeToggle" type="button" aria-pressed="false">
+        <span id="themeIcon">Dark</span>
+        <span class="switch-track"><span class="switch-thumb"></span></span>
+      </button>
+    </section>
+
+    <section class="workspace">
+      <aside class="setup-panel">
+        <div class="visual-panel" aria-hidden="true">
+          <div class="pulse-ring"></div>
+          <div class="mic-orb">VOICE</div>
+        </div>
+
+        <form class="credential-form" id="credentialForm">
+          <div class="section-heading">
+            <p class="eyebrow">Connection</p>
+            <h2>Use your service credentials</h2>
+          </div>
+
+          <label for="speechKey">Speech key</label>
+          <div class="password-field">
+            <input id="speechKey" name="speechKey" type="password" autocomplete="off" placeholder="Paste your Speech resource key" required>
+            <button id="toggleKey" type="button">Show</button>
+          </div>
+
+          <label for="speechEndpoint">Endpoint</label>
+          <input id="speechEndpoint" name="speechEndpoint" type="url" placeholder="https://your-resource.cognitiveservices.azure.com" required>
+          <p class="field-hint">Use the endpoint from your Azure Speech resource. Your key is never stored by this page.</p>
+
+          <div class="grid-2">
+            <div>
+              <label for="language">Recognition language</label>
+              <select id="language" name="language">
+                <option value="en-US">English (US)</option>
+                <option value="en-IN">English (India)</option>
+                <option value="hi-IN">Hindi (India)</option>
+                <option value="ta-IN">Tamil (India)</option>
+                <option value="te-IN">Telugu (India)</option>
+                <option value="fr-FR">French</option>
+                <option value="es-ES">Spanish</option>
+                <option value="ja-JP">Japanese</option>
+              </select>
+            </div>
+            <div>
+              <label for="targetLanguage">Translate to</label>
+              <select id="targetLanguage" name="targetLanguage">
+                <option value="hi">Hindi</option>
+                <option value="en">English</option>
+                <option value="ta">Tamil</option>
+                <option value="te">Telugu</option>
+                <option value="fr">French</option>
+                <option value="es">Spanish</option>
+                <option value="ja">Japanese</option>
+              </select>
+            </div>
+          </div>
+
+          <label for="voiceName">Text to speech voice</label>
+          <select id="voiceName" name="voiceName">
+            <option value="en-US-JennyNeural">Jenny - English US</option>
+            <option value="en-IN-NeerjaNeural">Neerja - English India</option>
+            <option value="hi-IN-SwaraNeural">Swara - Hindi India</option>
+            <option value="ta-IN-PallaviNeural">Pallavi - Tamil India</option>
+            <option value="te-IN-ShrutiNeural">Shruti - Telugu India</option>
+            <option value="fr-FR-DeniseNeural">Denise - French</option>
+            <option value="es-ES-ElviraNeural">Elvira - Spanish</option>
+          </select>
+
+          <div class="grid-2">
+            <div>
+              <label for="speechRate">Speaking rate</label>
+              <select id="speechRate" name="speechRate">
+                <option value="-10%">Slow</option>
+                <option value="0%" selected>Natural</option>
+                <option value="12%">Bright</option>
+                <option value="25%">Fast</option>
+              </select>
+            </div>
+            <div>
+              <label for="speechPitch">Voice pitch</label>
+              <select id="speechPitch" name="speechPitch">
+                <option value="-8%">Lower</option>
+                <option value="0%" selected>Natural</option>
+                <option value="8%">Higher</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="status-card">
+            <span class="status-dot" id="statusDot"></span>
+            <div>
+              <strong id="statusTitle">Ready to connect</strong>
+              <p id="statusMessage">Credentials stay in your browser and are only used for Speech SDK calls.</p>
+            </div>
+          </div>
+        </form>
+      </aside>
+
+      <section class="main-panel">
+        <div class="tabs" role="tablist" aria-label="Speech tools">
+          <button class="tab active" type="button" data-tab="recognize" role="tab" aria-selected="true">Speech to text</button>
+          <button class="tab" type="button" data-tab="synthesize" role="tab" aria-selected="false">Text to speech</button>
+          <button class="tab" type="button" data-tab="translate" role="tab" aria-selected="false">Translate speech</button>
+        </div>
+
+        <section class="tool-view active" id="recognize" role="tabpanel">
+          <div class="section-heading">
+            <p class="eyebrow">Microphone</p>
+            <h2>Convert speech into editable text</h2>
+          </div>
+
+          <div class="action-row">
+            <button class="primary-btn" id="recognizeOnce" type="button">Recognize once</button>
+            <button class="secondary-btn" id="startContinuous" type="button">Start live captions</button>
+            <button class="ghost-btn" id="stopContinuous" type="button" disabled>Stop</button>
+          </div>
+
+          <label for="transcriptOutput">Transcript</label>
+          <textarea id="transcriptOutput" rows="10" placeholder="Your transcript will appear here."></textarea>
+
+          <div class="utility-row">
+            <button class="ghost-btn" id="copyTranscript" type="button">Copy</button>
+            <button class="ghost-btn" id="downloadTranscript" type="button">Download .txt</button>
+            <button class="ghost-btn" id="clearTranscript" type="button">Clear</button>
+            <span id="transcriptStats">0 characters</span>
+          </div>
+        </section>
+
+        <section class="tool-view" id="synthesize" role="tabpanel" hidden>
+          <div class="section-heading">
+            <p class="eyebrow">Neural voice</p>
+            <h2>Turn text into natural speech</h2>
+          </div>
+
+          <label for="synthesisText">Text to speak</label>
+          <textarea id="synthesisText" rows="9" placeholder="Type something for the selected voice to speak.">Hello, welcome to Speech Studio Web. This is a browser based demo for Azure Speech Service.</textarea>
+
+          <div class="action-row">
+            <button class="primary-btn" id="speakText" type="button">Speak text</button>
+            <button class="secondary-btn" id="stopSpeaking" type="button">Stop audio</button>
+            <button class="ghost-btn" id="downloadAudio" type="button" disabled>Download .wav</button>
+          </div>
+
+          <div class="audio-panel">
+            <label for="audioPreview">Generated audio</label>
+            <audio id="audioPreview" controls></audio>
+            <p class="field-hint">After synthesis, the generated audio can be replayed or downloaded.</p>
+          </div>
+        </section>
+
+        <section class="tool-view" id="translate" role="tabpanel" hidden>
+          <div class="section-heading">
+            <p class="eyebrow">Realtime</p>
+            <h2>Translate spoken words</h2>
+          </div>
+
+          <div class="action-row">
+            <button class="primary-btn" id="translateOnce" type="button">Translate once</button>
+          </div>
+
+          <div class="split-output">
+            <div>
+              <label for="sourceOutput">Detected speech</label>
+              <textarea id="sourceOutput" rows="8" placeholder="Original speech text."></textarea>
+            </div>
+            <div>
+              <label for="translationOutput">Translation</label>
+              <textarea id="translationOutput" rows="8" placeholder="Translated text."></textarea>
+            </div>
+          </div>
+        </section>
+
+        <section class="tips-band">
+          <article>
+            <strong>Speech to text</strong>
+            <p>Capture one phrase or live captions from your microphone.</p>
+          </article>
+          <article>
+            <strong>Text to speech</strong>
+            <p>Preview neural voices with your own text.</p>
+          </article>
+          <article>
+            <strong>Translation</strong>
+            <p>Speak in one language and receive a translated result.</p>
+          </article>
+        </section>
+      </section>
+    </section>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="https://aka.ms/csspeech/jsbrowserpackageraw"></script>
+  <script src="script.js"></script>
+</body>
+</html>
