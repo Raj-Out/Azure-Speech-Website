@@ -24,7 +24,24 @@
       <aside class="setup-panel">
         <div class="visual-panel" aria-hidden="true">
           <div class="pulse-ring"></div>
-          <div class="mic-orb">VOICE</div>
+          <div class="mic-orb">
+            <span>VOICE</span>
+            <div class="orb-wave">
+              <i></i>
+              <i></i>
+              <i></i>
+              <i></i>
+              <i></i>
+            </div>
+          </div>
+          <div class="sound-grid">
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
         </div>
 
         <form class="credential-form" id="credentialForm">
@@ -110,7 +127,7 @@
             <span class="status-dot" id="statusDot"></span>
             <div>
               <strong id="statusTitle">Ready to connect</strong>
-              <p id="statusMessage">Credentials stay in your browser and are only used for Speech SDK calls.</p>
+              <p id="statusMessage">Credentials stay in your browser and are only used for Azure Speech REST calls.</p>
             </div>
           </div>
         </form>

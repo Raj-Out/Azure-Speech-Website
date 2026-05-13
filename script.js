@@ -812,14 +812,40 @@ function bindEvents() {
       if (ready) {
         setStatus("ok", "Credentials entered", "Choose a task and run the Speech Service.");
       } else {
-        setStatus("", "Ready to connect", "Credentials stay in your browser and are only used for Speech SDK calls.");
+        setStatus("", "Ready to connect", "Credentials stay in your browser and are only used for Azure Speech REST calls.");
       }
     });
+  });
+}
+
+function bindUiEffects() {
+  document.querySelectorAll("button").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      if (button.disabled) return;
+
+      const ripple = document.createElement("span");
+      const rect = button.getBoundingClientRect();
+      const x = event.clientX ? event.clientX - rect.left : rect.width / 2;
+      const y = event.clientY ? event.clientY - rect.top : rect.height / 2;
+      ripple.className = "click-ripple";
+      ripple.style.left = `${x}px`;
+      ripple.style.top = `${y}px`;
+      button.appendChild(ripple);
+      window.setTimeout(() => ripple.remove(), 540);
+    });
+  });
+
+  document.querySelectorAll("input, textarea, select").forEach((field) => {
+    const syncValueState = () => field.classList.toggle("has-value", Boolean(field.value));
+    syncValueState();
+    field.addEventListener("input", syncValueState);
+    field.addEventListener("change", syncValueState);
   });
 }
 
 bindTheme();
 bindTabs();
 bindEvents();
+bindUiEffects();
 updateTranscriptStats();
 setSpeechActionsEnabled(true);
