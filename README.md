@@ -37,6 +37,7 @@ C:\Users\model\OneDrive\Desktop\ドキュメント\speech\index.html
 ```
 
 Then enter your Azure Speech key and endpoint on the left side of the page.
+If the endpoint alone does not produce speech output, enter your Speech resource region in the optional region field. The region must match the key's resource location.
 
 Example endpoint format:
 
@@ -51,6 +52,7 @@ https://centralindia.api.cognitive.microsoft.com
 ```
 
 Use the full endpoint shown in your Azure Speech resource page.
+For regional endpoints such as `centralindia.api.cognitive.microsoft.com`, the app automatically uses `centralindia` as the Speech SDK region. For resource endpoints such as `https://your-resource-name.cognitiveservices.azure.com`, add the region override if Azure returns an authentication or connection error.
 
 If the page says the Speech SDK could not be reached, refresh the browser and check that your internet connection, firewall, or browser extensions are not blocking scripts from Microsoft or jsDelivr.
 

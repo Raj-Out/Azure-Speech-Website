@@ -43,6 +43,10 @@
           <input id="speechEndpoint" name="speechEndpoint" type="url" placeholder="https://your-resource.cognitiveservices.azure.com" required>
           <p class="field-hint">Use the endpoint from your Azure Speech resource. Your key is never stored by this page.</p>
 
+          <label for="speechRegion">Region override (optional)</label>
+          <input id="speechRegion" name="speechRegion" type="text" autocomplete="off" placeholder="centralindia, eastus, westus">
+          <p class="field-hint">If your portal endpoint does not produce output, enter the resource region shown on the Azure Speech resource page.</p>
+
           <div class="grid-2">
             <div>
               <label for="language">Recognition language</label>

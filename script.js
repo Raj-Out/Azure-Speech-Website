@@ -20,6 +20,7 @@ const elements = {
   themeIcon: document.getElementById("themeIcon"),
   speechKey: document.getElementById("speechKey"),
   speechEndpoint: document.getElementById("speechEndpoint"),
+  speechRegion: document.getElementById("speechRegion"),
   toggleKey: document.getElementById("toggleKey"),
   language: document.getElementById("language"),
   targetLanguage: document.getElementById("targetLanguage"),
@@ -166,7 +167,8 @@ function ensureSdk() {
 
 function getCredentials() {
   const key = elements.speechKey.value.trim();
-  const endpoint = elements.speechEndpoint.value.trim();
+  const endpoint = normalizeEndpoint(elements.speechEndpoint.value);
+  const region = normalizeRegion(elements.speechRegion.value);
 
   if (!key || !endpoint) {
     throw new Error("Enter both your Speech key and endpoint first.");
@@ -179,20 +181,83 @@ function getCredentials() {
     throw new Error("Endpoint must be a valid URL.");
   }
 
-  return { key, endpointUrl };
+  return {
+    key,
+    endpointUrl,
+    region: region || inferRegionFromEndpoint(endpointUrl),
+    regionOverride: Boolean(region),
+  };
+}
+
+function normalizeEndpoint(value) {
+  const endpoint = value.trim();
+  if (!endpoint) return "";
+
+  if (/^https?:\/\//i.test(endpoint) || /^wss?:\/\//i.test(endpoint)) {
+    return endpoint;
+  }
+
+  return `https://${endpoint}`;
+}
+
+function normalizeRegion(value) {
+  return value.trim().toLowerCase().replace(/\s+/g, "");
+}
+
+function inferRegionFromEndpoint(endpointUrl) {
+  const hostParts = endpointUrl.hostname.toLowerCase().split(".");
+  const firstPart = hostParts[0];
+
+  if (
+    hostParts.length >= 4 &&
+    hostParts[1] === "api" &&
+    hostParts[2] === "cognitive" &&
+    hostParts[3] === "microsoft"
+  ) {
+    return firstPart;
+  }
+
+  if (
+    hostParts.length >= 4 &&
+    (hostParts[1] === "stt" || hostParts[1] === "tts") &&
+    hostParts[2] === "speech" &&
+    hostParts[3] === "microsoft"
+  ) {
+    return firstPart;
+  }
+
+  return "";
+}
+
+function createConfigFromCredentials(configFactory) {
+  ensureSdk();
+  const { key, endpointUrl, region, regionOverride } = getCredentials();
+
+  if (region) {
+    const config = configFactory.fromSubscription(key, region);
+    setStatus(
+      "ok",
+      "Credentials loaded",
+      regionOverride
+        ? `Using key with the ${region} region you entered.`
+        : `Using key with the inferred ${region} region.`
+    );
+    return config;
+  }
+
+  const config = configFactory.fromEndpoint(endpointUrl, key);
+  setStatus("ok", "Credentials loaded", "Using the endpoint from your Speech resource.");
+  return config;
 }
 
 function createSpeechConfig() {
-  ensureSdk();
-  const { key, endpointUrl } = getCredentials();
-  const speechConfig = SpeechSDK.SpeechConfig.fromEndpoint(endpointUrl, key);
+  const speechConfig = createConfigFromCredentials(SpeechSDK.SpeechConfig);
 
   speechConfig.speechRecognitionLanguage = elements.language.value;
   speechConfig.speechSynthesisLanguage = elements.language.value;
   speechConfig.speechSynthesisVoiceName = elements.voiceName.value;
   speechConfig.speechSynthesisOutputFormat = SpeechSDK.SpeechSynthesisOutputFormat.Riff24Khz16BitMonoPcm;
 
-  setStatus("ok", "Credentials loaded", "Ready for microphone, translation, and voice synthesis tasks.");
   return speechConfig;
 }
 
@@ -227,9 +292,7 @@ function buildSsml(text) {
 }
 
 function createTranslationConfig() {
-  ensureSdk();
-  const { key, endpointUrl } = getCredentials();
-  const translationConfig = SpeechSDK.SpeechTranslationConfig.fromEndpoint(endpointUrl, key);
+  const translationConfig = createConfigFromCredentials(SpeechSDK.SpeechTranslationConfig);
 
   translationConfig.speechRecognitionLanguage = elements.language.value;
   translationConfig.addTargetLanguage(elements.targetLanguage.value);
@@ -279,7 +342,8 @@ function handleResultReason(result, successMessage) {
 
   if (result.reason === reason.Canceled) {
     const details = SpeechSDK.CancellationDetails.fromResult(result);
-    throw new Error(details.errorDetails || "The Speech Service canceled the request.");
+    const errorCode = details.errorCode ? ` (${details.errorCode})` : "";
+    throw new Error(`${details.errorDetails || "The Speech Service canceled the request."}${errorCode}`);
   }
 
   if (result.reason === reason.NoMatch) {
@@ -521,6 +585,7 @@ function downloadAudio() {
 
 function reportError(error) {
   const message = typeof error === "string" ? error : error.message;
+  console.error(error);
   setStatus("error", "Something needs attention", message || "An unknown error occurred.");
   showToast(message || "An unknown error occurred.");
 }
@@ -577,7 +642,7 @@ function bindEvents() {
   elements.downloadAudio.addEventListener("click", downloadAudio);
   elements.transcriptOutput.addEventListener("input", updateTranscriptStats);
 
-  [elements.speechKey, elements.speechEndpoint].forEach((field) => {
+  [elements.speechKey, elements.speechEndpoint, elements.speechRegion].forEach((field) => {
     field.addEventListener("input", () => {
       const ready = elements.speechKey.value.trim() && elements.speechEndpoint.value.trim();
       if (ready) {
