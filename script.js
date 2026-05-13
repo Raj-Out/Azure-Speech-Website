@@ -2,6 +2,7 @@ const SpeechApp = {
   recognizer: null,
   synthesizer: null,
   audioPlayer: null,
+  continuousRestActive: false,
   lastAudioUrl: null,
   sdkReady: false,
   sdkLoading: false,
@@ -197,6 +198,16 @@ function getCredentials() {
   };
 }
 
+function getSpeechServiceRegion() {
+  const { region } = getCredentials();
+
+  if (!region) {
+    throw new Error("Enter the Speech resource region, for example eastasia, in the Region override field.");
+  }
+
+  return region;
+}
+
 function normalizeEndpoint(value) {
   const endpoint = value.trim();
   if (!endpoint) return "";
@@ -371,80 +382,60 @@ function handleResultReason(result, successMessage) {
 async function recognizeOnce() {
   try {
     closeRecognizer();
-    const speechConfig = createSpeechConfig();
-    const audioConfig = SpeechSDK.AudioConfig.fromDefaultMicrophoneInput();
-    const recognizer = new SpeechSDK.SpeechRecognizer(speechConfig, audioConfig);
-    SpeechApp.recognizer = recognizer;
+    elements.recognizeOnce.disabled = true;
+    setStatus("", "Listening once", "Allow microphone access, then speak for about 6 seconds.");
 
-    setStatus("", "Listening once", "Allow microphone access, then speak a short phrase.");
-    recognizer.recognizeOnceAsync(
-      (result) => {
-        try {
-          if (handleResultReason(result, "Speech recognized.")) {
-            appendTranscript(result.text);
-            setStatus("ok", "Speech recognized", "The transcript has been updated.");
-          }
-        } catch (error) {
-          reportError(error);
-        } finally {
-          closeRecognizer();
-        }
-      },
-      (error) => {
-        reportError(error);
-        closeRecognizer();
-      }
-    );
+    const text = await recognizeSpeechWithRest(6000);
+    if (!text) {
+      setStatus("error", "No speech recognized", "Try again closer to the microphone.");
+      showToast("No speech could be recognized.");
+      return;
+    }
+
+    appendTranscript(text);
+    setStatus("ok", "Speech recognized", "The transcript has been updated.");
+    showToast("Speech recognized.");
   } catch (error) {
     reportError(error);
+  } finally {
+    elements.recognizeOnce.disabled = false;
   }
 }
 
-function startContinuousRecognition() {
+async function startContinuousRecognition() {
   try {
     closeRecognizer();
-    const speechConfig = createSpeechConfig();
-    const audioConfig = SpeechSDK.AudioConfig.fromDefaultMicrophoneInput();
-    const recognizer = new SpeechSDK.SpeechRecognizer(speechConfig, audioConfig);
-    SpeechApp.recognizer = recognizer;
-
+    SpeechApp.continuousRestActive = true;
     elements.startContinuous.disabled = true;
     elements.stopContinuous.disabled = false;
-    setStatus("", "Live captions running", "Speak naturally. Final phrases are added to the transcript.");
+    setStatus("", "Live captions running", "Recording short speech chunks and sending them to Azure.");
+    showToast("Live captions started.");
 
-    recognizer.recognizing = (_, event) => {
-      elements.statusMessage.textContent = event.result.text || "Listening for speech...";
-    };
-
-    recognizer.recognized = (_, event) => {
-      if (event.result.reason === SpeechSDK.ResultReason.RecognizedSpeech) {
-        appendTranscript(event.result.text);
+    while (SpeechApp.continuousRestActive) {
+      elements.statusMessage.textContent = "Listening for speech...";
+      try {
+        const text = await recognizeSpeechWithRest(4500);
+        if (text) {
+          appendTranscript(text);
+          elements.statusMessage.textContent = text;
+        }
+      } catch (error) {
+        if (SpeechApp.continuousRestActive) {
+          throw error;
+        }
       }
-    };
-
-    recognizer.canceled = (_, event) => {
-      stopContinuousRecognition();
-      reportError(event.errorDetails || "Continuous recognition was canceled.");
-    };
-
-    recognizer.sessionStopped = () => {
-      stopContinuousRecognition();
-    };
-
-    recognizer.startContinuousRecognitionAsync(
-      () => showToast("Live captions started."),
-      (error) => {
-        reportError(error);
-        stopContinuousRecognition();
-      }
-    );
+    }
   } catch (error) {
     reportError(error);
-    stopContinuousRecognition();
+  } finally {
+    SpeechApp.continuousRestActive = false;
+    elements.startContinuous.disabled = false;
+    elements.stopContinuous.disabled = true;
   }
 }
 
 function stopContinuousRecognition() {
+  SpeechApp.continuousRestActive = false;
   elements.startContinuous.disabled = false;
   elements.stopContinuous.disabled = true;
 
@@ -467,7 +458,7 @@ function stopContinuousRecognition() {
   );
 }
 
-function speakText() {
+async function speakText() {
   try {
     closeSynthesizer();
     const text = elements.synthesisText.value.trim();
@@ -477,83 +468,231 @@ function speakText() {
 
     setSpeakingBusy(true);
     setSynthesisStatus("Preparing speech audio. Keep this tab open.", "");
-    const speechConfig = createSpeechConfig();
-    SpeechApp.audioPlayer = new SpeechSDK.SpeakerAudioDestination();
-    const audioConfig = SpeechSDK.AudioConfig.fromSpeakerOutput(SpeechApp.audioPlayer);
-    const synthesizer = new SpeechSDK.SpeechSynthesizer(speechConfig, audioConfig);
-    SpeechApp.synthesizer = synthesizer;
+    setStatus("", "Creating speech", "Sending your text to Azure Speech REST.");
 
-    setStatus("", "Speaking", "The selected neural voice is reading your text.");
-    synthesizer.speakSsmlAsync(
-      buildSsml(text),
-      (result) => {
-        try {
-          if (handleResultReason(result, "Speech synthesis complete.")) {
-            setGeneratedAudio(result.audioData);
-            elements.audioPreview.play().catch(() => {
-              showToast("Audio is ready. Press play in the Generated audio control.");
-            });
-            setSynthesisStatus("Audio is ready. You can replay or download it.", "ok");
-            setStatus("ok", "Speech complete", "You can edit the text or choose another voice.");
-          }
-        } catch (error) {
-          reportError(error, { synthesis: true });
-        } finally {
-          closeSynthesizer();
-          setSpeakingBusy(false);
-        }
-      },
-      (error) => {
-        reportError(error, { synthesis: true });
-        closeSynthesizer();
-        setSpeakingBusy(false);
-      }
-    );
+    const audioData = await synthesizeSpeechWithRest(text);
+    setGeneratedAudio(audioData);
+    elements.audioPreview.play().catch(() => {
+      showToast("Audio is ready. Press play in the Generated audio control.");
+    });
+    setSynthesisStatus("Audio is ready. You can replay or download it.", "ok");
+    setStatus("ok", "Speech complete", "You can edit the text or choose another voice.");
+    showToast("Speech synthesis complete.");
   } catch (error) {
     reportError(error, { synthesis: true });
+  } finally {
     setSpeakingBusy(false);
   }
+}
+
+function getAudioContextConstructor() {
+  return window.AudioContext || window.webkitAudioContext;
+}
+
+function flattenFloat32Chunks(chunks, sampleCount) {
+  const samples = new Float32Array(sampleCount);
+  let offset = 0;
+
+  chunks.forEach((chunk) => {
+    samples.set(chunk, offset);
+    offset += chunk.length;
+  });
+
+  return samples;
+}
+
+function resampleTo16Khz(samples, sourceSampleRate) {
+  const targetSampleRate = 16000;
+  if (sourceSampleRate === targetSampleRate) return samples;
+
+  const ratio = sourceSampleRate / targetSampleRate;
+  const targetLength = Math.round(samples.length / ratio);
+  const result = new Float32Array(targetLength);
+
+  for (let index = 0; index < targetLength; index += 1) {
+    const sourceIndex = index * ratio;
+    const lower = Math.floor(sourceIndex);
+    const upper = Math.min(Math.ceil(sourceIndex), samples.length - 1);
+    const weight = sourceIndex - lower;
+    result[index] = samples[lower] * (1 - weight) + samples[upper] * weight;
+  }
+
+  return result;
+}
+
+function writeString(view, offset, value) {
+  for (let index = 0; index < value.length; index += 1) {
+    view.setUint8(offset + index, value.charCodeAt(index));
+  }
+}
+
+function encodeWav(samples) {
+  const bytesPerSample = 2;
+  const sampleRate = 16000;
+  const buffer = new ArrayBuffer(44 + samples.length * bytesPerSample);
+  const view = new DataView(buffer);
+
+  writeString(view, 0, "RIFF");
+  view.setUint32(4, 36 + samples.length * bytesPerSample, true);
+  writeString(view, 8, "WAVE");
+  writeString(view, 12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * bytesPerSample, true);
+  view.setUint16(32, bytesPerSample, true);
+  view.setUint16(34, 8 * bytesPerSample, true);
+  writeString(view, 36, "data");
+  view.setUint32(40, samples.length * bytesPerSample, true);
+
+  let offset = 44;
+  samples.forEach((sample) => {
+    const clamped = Math.max(-1, Math.min(1, sample));
+    view.setInt16(offset, clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff, true);
+    offset += bytesPerSample;
+  });
+
+  return new Blob([view], { type: "audio/wav" });
+}
+
+async function recordMicrophoneAsWav(durationMs) {
+  const AudioContextConstructor = getAudioContextConstructor();
+  if (!AudioContextConstructor) {
+    throw new Error("This browser does not support microphone audio recording.");
+  }
+
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  const audioContext = new AudioContextConstructor();
+  const source = audioContext.createMediaStreamSource(stream);
+  const processor = audioContext.createScriptProcessor(4096, 1, 1);
+  const chunks = [];
+  let sampleCount = 0;
+
+  processor.onaudioprocess = (event) => {
+    const input = event.inputBuffer.getChannelData(0);
+    chunks.push(new Float32Array(input));
+    sampleCount += input.length;
+  };
+
+  source.connect(processor);
+  processor.connect(audioContext.destination);
+
+  await new Promise((resolve) => window.setTimeout(resolve, durationMs));
+
+  const sourceSampleRate = audioContext.sampleRate;
+  processor.disconnect();
+  source.disconnect();
+  stream.getTracks().forEach((track) => track.stop());
+  await audioContext.close();
+
+  const samples = flattenFloat32Chunks(chunks, sampleCount);
+  return encodeWav(resampleTo16Khz(samples, sourceSampleRate));
+}
+
+async function recognizeSpeechWithRest(durationMs = 6000) {
+  const { key } = getCredentials();
+  const region = getSpeechServiceRegion();
+  const language = encodeURIComponent(elements.language.value);
+  const wavAudio = await recordMicrophoneAsWav(durationMs);
+  let response;
+
+  try {
+    response = await fetch(
+      `https://${region}.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1?language=${language}&format=detailed`,
+      {
+        method: "POST",
+        headers: {
+          "Ocp-Apim-Subscription-Key": key,
+          "Content-Type": "audio/wav",
+          Accept: "application/json",
+        },
+        body: wavAudio,
+      }
+    );
+  } catch {
+    throw new Error("Could not reach Azure Speech recognition. Check microphone permission, endpoint region, browser network access, and key.");
+  }
+
+  const payloadText = await response.text();
+  let payload = {};
+  try {
+    payload = payloadText ? JSON.parse(payloadText) : {};
+  } catch {
+    payload = { error: payloadText };
+  }
+
+  if (!response.ok) {
+    throw new Error(payload.error?.message || payload.error || `Speech recognition failed with HTTP ${response.status}.`);
+  }
+
+  if (payload.RecognitionStatus && payload.RecognitionStatus !== "Success") {
+    throw new Error(`Speech recognition returned ${payload.RecognitionStatus}. Try speaking clearly near the microphone.`);
+  }
+
+  return payload.DisplayText || payload.NBest?.[0]?.Display || "";
+}
+
+async function synthesizeSpeechWithRest(text) {
+  const { key } = getCredentials();
+  const region = getSpeechServiceRegion();
+  let response;
+
+  try {
+    response = await fetch(`https://${region}.tts.speech.microsoft.com/cognitiveservices/v1`, {
+      method: "POST",
+      headers: {
+        "Ocp-Apim-Subscription-Key": key,
+        "Content-Type": "application/ssml+xml",
+        "X-Microsoft-OutputFormat": "riff-24khz-16bit-mono-pcm",
+        Accept: "audio/wav",
+      },
+      body: buildSsml(text),
+    });
+  } catch {
+    throw new Error("Could not reach Azure Speech. Check the endpoint region, browser network access, and key.");
+  }
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || `Speech synthesis failed with HTTP ${response.status}. Check your key and region.`);
+  }
+
+  return response.arrayBuffer();
 }
 
 function stopSpeaking() {
   if (SpeechApp.audioPlayer) {
     SpeechApp.audioPlayer.pause();
   }
+  elements.audioPreview.pause();
   closeSynthesizer();
   setStatus("ok", "Audio stopped", "Text to speech playback has been stopped.");
 }
 
-function translateOnce() {
+async function translateOnce() {
   try {
     closeRecognizer();
-    const translationConfig = createTranslationConfig();
-    const audioConfig = SpeechSDK.AudioConfig.fromDefaultMicrophoneInput();
-    const recognizer = new SpeechSDK.TranslationRecognizer(translationConfig, audioConfig);
-    const target = elements.targetLanguage.value;
-    SpeechApp.recognizer = recognizer;
+    elements.translateOnce.disabled = true;
+    setStatus("", "Listening for translation", "First converting speech to text with Azure Speech REST.");
 
-    setStatus("", "Listening for translation", "Speak one phrase for translation.");
-    recognizer.recognizeOnceAsync(
-      (result) => {
-        try {
-          if (handleResultReason(result, "Speech translated.")) {
-            elements.sourceOutput.value = result.text || "";
-            elements.translationOutput.value = result.translations.get(target) || "";
-            setStatus("ok", "Translation complete", "Original and translated text are ready.");
-          }
-        } catch (error) {
-          reportError(error);
-        } finally {
-          closeRecognizer();
-        }
-      },
-      (error) => {
-        reportError(error);
-        closeRecognizer();
-      }
+    const text = await recognizeSpeechWithRest(6000);
+    elements.sourceOutput.value = text || "";
+    elements.translationOutput.value = text
+      ? "Speech-to-text is working. Translation requires an Azure Translator or multi-service key, so this Speech-only page cannot translate with only a Speech resource key."
+      : "";
+
+    setStatus(
+      text ? "ok" : "error",
+      text ? "Speech captured" : "No speech recognized",
+      text
+        ? "Speech was captured. Add Azure Translator support to translate the text."
+        : "Try again closer to the microphone."
     );
   } catch (error) {
     reportError(error);
+  } finally {
+    elements.translateOnce.disabled = false;
   }
 }
 
@@ -683,4 +822,4 @@ bindTheme();
 bindTabs();
 bindEvents();
 updateTranscriptStats();
-loadSpeechSdk();
+setSpeechActionsEnabled(true);
