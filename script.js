@@ -9,9 +9,9 @@ const SpeechApp = {
 };
 
 const SPEECH_SDK_SOURCES = [
-  "https://aka.ms/csspeech/jsbrowserpackageraw",
   "https://cdn.jsdelivr.net/npm/microsoft-cognitiveservices-speech-sdk/distrib/browser/microsoft.cognitiveservices.speech.sdk.bundle.js",
   "https://unpkg.com/microsoft-cognitiveservices-speech-sdk/distrib/browser/microsoft.cognitiveservices.speech.sdk.bundle.js",
+  "https://aka.ms/csspeech/jsbrowserpackageraw",
 ];
 
 const elements = {
@@ -79,7 +79,8 @@ function setSpeechActionsEnabled(enabled) {
     elements.speakText,
     elements.translateOnce,
   ].forEach((button) => {
-    button.disabled = !enabled;
+    button.disabled = false;
+    button.setAttribute("aria-disabled", String(!enabled));
   });
 
   if (!enabled) {
@@ -136,32 +137,33 @@ function loadScript(source) {
 async function loadSpeechSdk() {
   if (window.SpeechSDK) {
     markSdkReady("existing page script");
-    return;
+    return true;
   }
 
-  if (SpeechApp.sdkLoading) return;
+  if (SpeechApp.sdkLoading) return false;
 
   SpeechApp.sdkLoading = true;
-  setSpeechActionsEnabled(false);
+  setSpeechActionsEnabled(true);
   setStatus("", "Loading Speech SDK", "Preparing the browser speech tools. This can take a few seconds.");
 
   for (const source of SPEECH_SDK_SOURCES) {
     try {
       const loadedSource = await loadScript(source);
       markSdkReady(loadedSource);
-      return;
+      return true;
     } catch (error) {
       console.warn(error.message);
     }
   }
 
   SpeechApp.sdkLoading = false;
-  setSpeechActionsEnabled(false);
+  setSpeechActionsEnabled(true);
   setStatus(
     "error",
     "Speech SDK could not load",
     "Your browser or network blocked Microsoft, jsDelivr, and unpkg SDK scripts. Try another browser, disable script blockers, or use another network."
   );
+  return false;
 }
 
 function ensureSdk() {

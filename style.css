@@ -54,6 +54,7 @@ textarea {
 button {
   border: 0;
   cursor: pointer;
+  user-select: none;
 }
 
 button:disabled {
