@@ -219,6 +219,20 @@ label {
   line-height: 1.45;
 }
 
+.inline-status {
+  min-height: 1.45em;
+}
+
+.inline-status.ok {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.inline-status.error {
+  color: var(--danger);
+  font-weight: 700;
+}
+
 input,
 select,
 textarea {

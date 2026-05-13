@@ -45,6 +45,7 @@ const elements = {
   stopSpeaking: document.getElementById("stopSpeaking"),
   downloadAudio: document.getElementById("downloadAudio"),
   audioPreview: document.getElementById("audioPreview"),
+  synthesisStatus: document.getElementById("synthesisStatus"),
   translateOnce: document.getElementById("translateOnce"),
   sourceOutput: document.getElementById("sourceOutput"),
   translationOutput: document.getElementById("translationOutput"),
@@ -64,6 +65,11 @@ function setStatus(type, title, message) {
   elements.statusDot.className = `status-dot ${type || ""}`.trim();
   elements.statusTitle.textContent = title;
   elements.statusMessage.textContent = message;
+}
+
+function setSynthesisStatus(message, type = "") {
+  elements.synthesisStatus.textContent = message;
+  elements.synthesisStatus.className = `field-hint inline-status ${type}`.trim();
 }
 
 function setSpeechActionsEnabled(enabled) {
@@ -259,6 +265,11 @@ function createSpeechConfig() {
   speechConfig.speechSynthesisOutputFormat = SpeechSDK.SpeechSynthesisOutputFormat.Riff24Khz16BitMonoPcm;
 
   return speechConfig;
+}
+
+function setSpeakingBusy(isBusy) {
+  elements.speakText.disabled = isBusy;
+  elements.speakText.textContent = isBusy ? "Preparing audio..." : "Speak text";
 }
 
 function escapeXml(value) {
@@ -462,6 +473,8 @@ function speakText() {
       throw new Error("Enter some text to speak.");
     }
 
+    setSpeakingBusy(true);
+    setSynthesisStatus("Preparing speech audio. Keep this tab open.", "");
     const speechConfig = createSpeechConfig();
     SpeechApp.audioPlayer = new SpeechSDK.SpeakerAudioDestination();
     const audioConfig = SpeechSDK.AudioConfig.fromSpeakerOutput(SpeechApp.audioPlayer);
@@ -475,21 +488,28 @@ function speakText() {
         try {
           if (handleResultReason(result, "Speech synthesis complete.")) {
             setGeneratedAudio(result.audioData);
+            elements.audioPreview.play().catch(() => {
+              showToast("Audio is ready. Press play in the Generated audio control.");
+            });
+            setSynthesisStatus("Audio is ready. You can replay or download it.", "ok");
             setStatus("ok", "Speech complete", "You can edit the text or choose another voice.");
           }
         } catch (error) {
-          reportError(error);
+          reportError(error, { synthesis: true });
         } finally {
           closeSynthesizer();
+          setSpeakingBusy(false);
         }
       },
       (error) => {
-        reportError(error);
+        reportError(error, { synthesis: true });
         closeSynthesizer();
+        setSpeakingBusy(false);
       }
     );
   } catch (error) {
-    reportError(error);
+    reportError(error, { synthesis: true });
+    setSpeakingBusy(false);
   }
 }
 
@@ -583,10 +603,13 @@ function downloadAudio() {
   link.remove();
 }
 
-function reportError(error) {
+function reportError(error, options = {}) {
   const message = typeof error === "string" ? error : error.message;
   console.error(error);
   setStatus("error", "Something needs attention", message || "An unknown error occurred.");
+  if (options.synthesis) {
+    setSynthesisStatus(message || "Speech synthesis failed. Check your key, endpoint, and region.", "error");
+  }
   showToast(message || "An unknown error occurred.");
 }
 
